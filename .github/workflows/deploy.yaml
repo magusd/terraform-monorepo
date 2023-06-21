@@ -1,0 +1,49 @@
+name: Terraform
+
+on:
+  push:
+    branches:
+      - iac
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  account-development:
+    name: AWS Account Development
+    uses: ./.github/workflows/terraform-project.yaml
+    secrets: inherit
+    with:
+      project: terraform/accounts/development
+
+  account-shared-resources:
+    name: AWS Account Shared Resources
+    uses: ./.github/workflows/terraform-project.yaml
+    secrets: inherit
+    with:
+      project: terraform/accounts/shared-resources
+
+  app-build:
+    needs: [account-shared-resources]
+    name: Build and Push Docker Image
+    uses: ./.github/workflows/container-build.yaml
+    secrets: inherit
+    with:
+      repository: "rg-ops"
+      tag: "development"
+  
+  app-development:
+    needs: [account-development, app-build]
+    name: Deploy Development
+    uses: ./.github/workflows/terraform-project.yaml
+    secrets: inherit
+    with:
+      project: terraform/envs/dev
+      terraform_variables: "-var=\"image_label=${{github.sha}}\""

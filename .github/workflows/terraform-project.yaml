@@ -1,0 +1,53 @@
+name: Terraform - Setup and Plan
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: "Which branch are we deploying from"
+        required: true
+        type: string
+      terraform_variables:
+        type: string
+        default: ""
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v3
+        
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: arn:aws:iam::984855687104:role/github
+          role-session-name: github-actions-aws-openid-github-actions
+          aws-region: us-east-1
+
+      - name: configure aws roles
+        run: | 
+          aws configure set default.aws_access_key_id $AWS_ACCESS_KEY_ID
+          aws configure set default.aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+          aws configure set default.aws_session_token $AWS_SESSION_TOKEN
+          AWS_CONFIG="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+          cat <<EOF >> $AWS_CONFIG
+            [profile foocompany-development]
+            role_arn = arn:aws:iam::950001364817:role/github_cross_account_role
+            source_profile = default
+
+            [profile foocompany-shared-resources]
+            role_arn = arn:aws:iam::984855687104:role/github_cross_account_role
+            source_profile = default
+          EOF
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+        working-directory: ${{ inputs.project }}
+
+      - name: Terraform Apply
+        # if: (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && github.event_name == 'push'
+        run: terraform apply -auto-approve ${{ inputs.terraform_variables }}
+        working-directory: ${{ inputs.project }}
+
